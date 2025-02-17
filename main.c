@@ -7,14 +7,13 @@
 #include "inc/font.h"
 #include "pico/bootrom.h"
 
+// Definições do display OLED
 #define I2C_PORT i2c1
 #define I2C_SDA 14
 #define I2C_SCL 15
 #define endereco 0x3C
 
-#define NUM_PIXELS 25
-#define BAUD_RATE 115200 // Define a taxa de transmissão
-
+// Definições de pinos do joystick, botões e LEDs
 #define VRY_PIN 26  
 #define VRX_PIN 27
 #define SW_PIN 22
@@ -24,21 +23,22 @@
 #define PIN_BUTTON_A 5
 #define PIN_BUTTON_B 6
 
-#define CALIBRATION_OFFSET 30
-#define DEBOUNCE_TIME_MS 300
 
-#define SQUARE_SIZE 8
+#define CALIBRATION_OFFSET 50 // Offset para calibração do joystick
 
-bool green_led_state = false;
 
-bool pwm_led_state = false;
+#define DEBOUNCE_TIME_MS 300 // Tempo de debounce em ms
 
-int border_style = 0 ;
+#define SQUARE_SIZE 8 // Tamanho do quadrado
+
+bool green_led_state = false; // Estado inicial do LED verde
+bool pwm_led_state = false; // Estado inicial da ativação do LED com PWM
+int border_style = 0; // Estilo da borda do display
+
 absolute_time_t last_interrupt_time = {0};
-ssd1306_t ssd;
+ssd1306_t ssd; 
 
-
-
+// Inicializa o PWM para um pino GPIO específico
 uint pwm_init_gpio(uint gpio, uint wrap) {
     gpio_set_function(gpio, GPIO_FUNC_PWM);
 
@@ -49,6 +49,7 @@ uint pwm_init_gpio(uint gpio, uint wrap) {
     return slice_num;  
 }
 
+// Função de tratamento de interrupção do GPIO
 static void gpio_irq_handler(uint gpio, uint32_t events)
 {
   // Obter o tempo atual para o debounce
@@ -63,28 +64,15 @@ static void gpio_irq_handler(uint gpio, uint32_t events)
     last_interrupt_time = current_time;
   }
 
-  // Verifica qual botão foi pressionado e alterna o estado do LED correspondente
+  // Ativa ou desativa a funcionalidade do LED com PWM quando o botão A é pressionado
   if (gpio == PIN_BUTTON_A)
   {
-    if(pwm_led_state)
-    {
-      pwm_led_state = false;
-    }
-    else
-    {
-      pwm_led_state = true;
-    }
+    pwm_led_state = !pwm_led_state;
   }
+  // Alterna o estado do LED verde e o estilo da borda do display quando o botão do joystick é pressionado
   else if (gpio == SW_PIN)
   {
-    if (green_led_state)
-    {
-      green_led_state = false;
-    }
-    else
-    {
-      green_led_state = true;
-    }
+    green_led_state = !green_led_state;
 
     if(border_style<=2)
     {
@@ -93,14 +81,12 @@ static void gpio_irq_handler(uint gpio, uint32_t events)
     else
     {
       border_style = 0;
-    }
-    if(border_style == 3)
-    {
       ssd1306_rect(&ssd, 3, 3, 122, 60, 0, 0);
       ssd1306_rect(&ssd, 4, 4, 120, 58, 0, 0);
       ssd1306_rect(&ssd, 5, 5, 118, 56, 0, 0);
       ssd1306_send_data(&ssd);
     }
+
   }
   else if (gpio == PIN_BUTTON_B)
   {
@@ -108,157 +94,157 @@ static void gpio_irq_handler(uint gpio, uint32_t events)
     printf("BOOTSEL ativado.\n");
     reset_usb_boot(0, 0);
   }
-
   // Atualiza o estado dos LEDs
   gpio_put(LED_PIN_GREEN, green_led_state);
 }
 
-int main() {
-    stdio_init_all();
-    adc_init(); 
-    adc_gpio_init(VRX_PIN); 
-    adc_gpio_init(VRY_PIN);
-    
-    gpio_init(PIN_BUTTON_A);
-    gpio_init(PIN_BUTTON_B);
-    gpio_init(SW_PIN);
-    gpio_init(LED_PIN_GREEN);
-    gpio_init(LED_PIN_BLUE);
-    gpio_init(LED_PIN_RED);
+int main() { 
+  stdio_init_all();
+  // Inicializa o ADC e os pinos do joystick
+  adc_init(); 
+  adc_gpio_init(VRX_PIN); 
+  adc_gpio_init(VRY_PIN);
+  gpio_init(SW_PIN);
+  
+  // Inicializa os pinos dos botões e LEDs
+  gpio_init(PIN_BUTTON_A);
+  gpio_init(PIN_BUTTON_B);
+  gpio_init(LED_PIN_GREEN);
+  gpio_init(LED_PIN_BLUE);
+  gpio_init(LED_PIN_RED);
 
-    gpio_set_dir(PIN_BUTTON_A, GPIO_IN);
-    gpio_set_dir(PIN_BUTTON_B, GPIO_IN);
-    gpio_set_dir(SW_PIN, GPIO_IN);
-    gpio_set_dir(LED_PIN_GREEN, GPIO_OUT);
-    gpio_set_dir(LED_PIN_BLUE, GPIO_OUT);
-    gpio_set_dir(LED_PIN_RED, GPIO_OUT);
-    gpio_pull_up(PIN_BUTTON_A);
-    gpio_pull_up(PIN_BUTTON_B);
-    gpio_pull_up(SW_PIN);
+  // Configura os pinos dos botões e LEDs
+  gpio_set_dir(PIN_BUTTON_A, GPIO_IN);
+  gpio_set_dir(PIN_BUTTON_B, GPIO_IN);
+  gpio_set_dir(SW_PIN, GPIO_IN);
+  gpio_set_dir(LED_PIN_GREEN, GPIO_OUT);
+  gpio_set_dir(LED_PIN_BLUE, GPIO_OUT);
+  gpio_set_dir(LED_PIN_RED, GPIO_OUT);
+  gpio_pull_up(PIN_BUTTON_A);
+  gpio_pull_up(PIN_BUTTON_B);
+  gpio_pull_up(SW_PIN);
 
-    
-    gpio_set_irq_enabled_with_callback(PIN_BUTTON_A, GPIO_IRQ_EDGE_FALL, 1, &gpio_irq_handler);
-    gpio_set_irq_enabled_with_callback(PIN_BUTTON_B, GPIO_IRQ_EDGE_FALL, 1, &gpio_irq_handler);
-    gpio_set_irq_enabled_with_callback(SW_PIN, GPIO_IRQ_EDGE_FALL, 1, &gpio_irq_handler);
-    
-    uint pwm_wrap = 4096;  
-    uint pwm_slice_red = pwm_init_gpio(LED_PIN_RED, pwm_wrap);
-    uint pwm_slice_blue = pwm_init_gpio(LED_PIN_BLUE, pwm_wrap);
-    
-    i2c_init(I2C_PORT, 400 * 1000);
-    
-    gpio_set_function(I2C_SDA, GPIO_FUNC_I2C); // Set the GPIO pin function to I2C
-    gpio_set_function(I2C_SCL, GPIO_FUNC_I2C); // Set the GPIO pin function to I2C
-    gpio_pull_up(I2C_SDA); // Pull up the data line
-    gpio_pull_up(I2C_SCL); // Pull up the clock line
-    
-    ssd1306_init(&ssd, WIDTH, HEIGHT, false, endereco, I2C_PORT);
-    ssd1306_config(&ssd);
-    ssd1306_send_data(&ssd);
+  // Configura a interrupção dos botões 
+  gpio_set_irq_enabled_with_callback(PIN_BUTTON_A, GPIO_IRQ_EDGE_FALL, 1, &gpio_irq_handler);
+  gpio_set_irq_enabled_with_callback(PIN_BUTTON_B, GPIO_IRQ_EDGE_FALL, 1, &gpio_irq_handler);
+  gpio_set_irq_enabled_with_callback(SW_PIN, GPIO_IRQ_EDGE_FALL, 1, &gpio_irq_handler);
+  
+  // Configura o pwm para os LEDs
+  uint pwm_wrap = 4096;  
+  uint pwm_slice_red = pwm_init_gpio(LED_PIN_RED, pwm_wrap);
+  uint pwm_slice_blue = pwm_init_gpio(LED_PIN_BLUE, pwm_wrap);
+  
+  i2c_init(I2C_PORT, 400 * 1000); // Inicializa o barramento I2C
+  gpio_set_function(I2C_SDA, GPIO_FUNC_I2C); // Configura o pino SDA
+  gpio_set_function(I2C_SCL, GPIO_FUNC_I2C); // Configura o pino SCL
+  gpio_pull_up(I2C_SDA); // Habilita o pull-up no pino SDA
+  gpio_pull_up(I2C_SCL); // Habilita o pull-up no pino SCL
+  
+  // Inicializa o display OLED
+  ssd1306_init(&ssd, WIDTH, HEIGHT, false, endereco, I2C_PORT);
+  ssd1306_config(&ssd);
+  ssd1306_send_data(&ssd);
 
+  // Lê os valores iniciais do joystick para calibração
+  adc_select_input(0);  
+  uint16_t vry_value = adc_read(); 
+  adc_select_input(1);
+  uint16_t vrx_value = adc_read();
+  
+  // Calibração do joystick
+  uint16_t vrx_calibration = vrx_value;
+  uint16_t vry_calibration = vry_value;
+
+  // Inicializa as variáveis de posição do quadrado
+  int square_pos_x = 0;
+  int square_pos_y = 0;
+  int prev_square_pos_x = 0;
+  int prev_square_pos_y = 0;
+
+  while (true)
+  {
+    // Lê os valores do joystick
     adc_select_input(0);  
     uint16_t vry_value = adc_read(); 
     adc_select_input(1);
     uint16_t vrx_value = adc_read();
-    
-    uint16_t vrx_calibration = vrx_value;
-    uint16_t vry_calibration = vry_value;
-    
-    uint32_t last_print_time = 0; 
 
-    int square_pos_x = 0;
-    int square_pos_y = 0;
-    int prev_square_pos_x = 0;
-    int prev_square_pos_y = 0;
-    while (true)
+    // Mapear valores do joystick para PWM
+    int16_t calibrated_vrx_value = vrx_value - vrx_calibration;
+    int16_t calibrated_vry_value = vry_value - vry_calibration;
+    int16_t mapped_vrx_value = calibrated_vrx_value;
+    int16_t mapped_vry_value = calibrated_vry_value;
+
+    // Limita os valores mapeados
+    if (mapped_vrx_value < 0) 
     {
-
-      adc_select_input(0);  
-      uint16_t vry_value = adc_read(); 
-      adc_select_input(1);
-      uint16_t vrx_value = adc_read();
-
-      // Mapear valores do joystick para PWM
-      int16_t calibrated_vrx_value = vrx_value - vrx_calibration;
-      int16_t calibrated_vry_value = vry_value - vry_calibration;
-      int16_t mapped_vrx_value = calibrated_vrx_value;
-      int16_t mapped_vry_value = calibrated_vry_value;
-
-      if (mapped_vrx_value < 0) {
-          mapped_vrx_value = -mapped_vrx_value;
-      }
-      if (mapped_vry_value < 0) {
-          mapped_vry_value = -mapped_vry_value;
-      }
-      if (mapped_vrx_value < CALIBRATION_OFFSET && mapped_vrx_value > 0) {
-          mapped_vrx_value = 0;
-      }
-      if (mapped_vry_value > -CALIBRATION_OFFSET && mapped_vry_value < 0) {
-          mapped_vry_value = 0;
-      }
-
-      if(pwm_led_state)
-      {
-        pwm_set_gpio_level(LED_PIN_RED, mapped_vrx_value * 2); 
-        pwm_set_gpio_level(LED_PIN_BLUE, mapped_vry_value * 2);
-      }
-      else
-      {
-        pwm_set_gpio_level(LED_PIN_RED, 0); 
-        pwm_set_gpio_level(LED_PIN_BLUE, 0);
-      }
-      
-      switch (border_style)
-      {
-      case 0:
-          ssd1306_rect(&ssd, 3, 3, 122, 60, 1, 0); // Desenha um retângulo
-          ssd1306_send_data(&ssd);
-          break;
-      case 1:
-          ssd1306_rect(&ssd, 3, 3, 122, 60, 1, 0);
-          ssd1306_rect(&ssd, 4, 4, 120, 58, 1, 0);
-          ssd1306_send_data(&ssd);
-          break; 
-      case 2:
-          ssd1306_rect(&ssd, 3, 3, 122, 60, 1, 0); // Desenha um retângulo
-          ssd1306_rect(&ssd, 4, 4, 120, 58, 1, 0);
-          ssd1306_rect(&ssd, 5, 5, 118, 56, 1, 0);
-          ssd1306_send_data(&ssd);
-          break;        
-      default:
-          break;
-      }
-
-        square_pos_x = (WIDTH - SQUARE_SIZE) / 2 + (calibrated_vrx_value * (WIDTH - SQUARE_SIZE) / 4096);
-        square_pos_y = ((HEIGHT - SQUARE_SIZE) / 2 + (-calibrated_vry_value * (HEIGHT - SQUARE_SIZE) / 4096));  
-
-        // Limpar a tela e desenhar o quadrado na nova posição
-        ssd1306_rect(&ssd, prev_square_pos_y, prev_square_pos_x, SQUARE_SIZE, SQUARE_SIZE, 0, 1);
-        ssd1306_rect(&ssd, square_pos_y, square_pos_x, SQUARE_SIZE, SQUARE_SIZE, 1, 1);
-        ssd1306_send_data(&ssd);
-        prev_square_pos_x = square_pos_x;
-        prev_square_pos_y = square_pos_y;
-
-        float duty_cycle_red = (mapped_vrx_value / 1941.0) * 100;  
-      float duty_cycle_blue = (mapped_vry_value / 2047.0) * 100;  
-      uint32_t current_time = to_ms_since_boot(get_absolute_time());  
-      if (current_time - last_print_time >= 1000) {  
-          printf("VRX: %u\n", vrx_value);
-          printf("VRY: %u\n", vry_value);
-          printf("Calibrated VRX: %d\n", calibrated_vrx_value);
-          printf("Calibrated VRY: %d\n", calibrated_vry_value);
-          printf("Mapped VRX: %d\n", mapped_vrx_value);
-          printf("Mapped VRY: %d\n", mapped_vry_value); 
-          printf("Square Pos X: %d\n", square_pos_x);
-          printf("Square Pos Y: %d\n", square_pos_y);
-          printf("Duty Cycle LED Red: %.2f%%\n", duty_cycle_red); 
-          printf("Duty Cycle LED Blue: %.2f%%\n", duty_cycle_blue); 
-          printf("Border Style: %d\n", border_style);
-          last_print_time = current_time;  
-      }
-
-      sleep_ms(50);
+      mapped_vrx_value = -mapped_vrx_value;
+    }
+    if (mapped_vry_value < 0)
+    {
+      mapped_vry_value = -mapped_vry_value;
+    }
+    if (mapped_vrx_value < CALIBRATION_OFFSET && mapped_vrx_value > 0)
+    {
+      mapped_vrx_value = 0;
+    }
+    if (mapped_vry_value > -CALIBRATION_OFFSET && mapped_vry_value < 0)
+    {
+      mapped_vry_value = 0;
     }
 
-    return 0;  
+    // Se o LED com PWM estiver ativado, ajusta o duty cycle dos LEDs vermelho e azul
+    if(pwm_led_state)
+    {
+      pwm_set_gpio_level(LED_PIN_RED, mapped_vrx_value * 2); 
+      pwm_set_gpio_level(LED_PIN_BLUE, mapped_vry_value * 2);
+    }
+    // Se não, desliga os LEDs	
+    else
+    {
+      pwm_set_gpio_level(LED_PIN_RED, 0); 
+      pwm_set_gpio_level(LED_PIN_BLUE, 0);
+    }
+    
+    // Atualiza a borda do display de acordo com o estilo selecionado
+    switch (border_style)
+    {
+      case 0:
+        ssd1306_rect(&ssd, 3, 3, 122, 60, 1, 0);
+        break;
+      case 1:
+        ssd1306_rect(&ssd, 3, 3, 122, 60, 1, 0);
+        ssd1306_rect(&ssd, 4, 4, 120, 58, 1, 0);
+        break; 
+      case 2:
+        ssd1306_rect(&ssd, 3, 3, 122, 60, 1, 0);
+        ssd1306_rect(&ssd, 4, 4, 120, 58, 1, 0);
+        ssd1306_rect(&ssd, 5, 5, 118, 56, 1, 0);
+        break;
+      case 3:
+        ssd1306_rect(&ssd, 3, 3, 122, 60, 0, 0);
+        ssd1306_rect(&ssd, 4, 4, 120, 58, 0, 0);
+        ssd1306_rect(&ssd, 5, 5, 118, 56, 0, 0);
+        break;
+      default:
+        break;
+      }
+    ssd1306_send_data(&ssd);
+    // Define a posição do quadrado de acordo com os valores do joystick
+    square_pos_x = (WIDTH - SQUARE_SIZE) / 2 + (calibrated_vrx_value * (WIDTH - SQUARE_SIZE) / 4096);
+    square_pos_y = (HEIGHT - SQUARE_SIZE) / 2 + (-calibrated_vry_value * (HEIGHT - SQUARE_SIZE) / 4096);  
+
+    // Apaga o quadrado na posição anterior e desenha o quadrado na nova posição
+    ssd1306_rect(&ssd, prev_square_pos_y, prev_square_pos_x, SQUARE_SIZE, SQUARE_SIZE, 0, 1);
+    ssd1306_rect(&ssd, square_pos_y, square_pos_x, SQUARE_SIZE, SQUARE_SIZE, 1, 1);
+    ssd1306_send_data(&ssd);
+
+    // Atualiza a posição anterior do quadrado para a posição atual
+    prev_square_pos_x = square_pos_x;
+    prev_square_pos_y = square_pos_y;
+
+    sleep_ms(50);
+  }
+
+  return 0;  
 }
