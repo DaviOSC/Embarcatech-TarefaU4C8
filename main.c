@@ -23,9 +23,7 @@
 #define PIN_BUTTON_A 5
 #define PIN_BUTTON_B 6
 
-
-#define CALIBRATION_OFFSET 50 // Offset para calibração do joystick
-
+#define CALIBRATION_OFFSET 100 // Offset para calibração do joystick
 
 #define DEBOUNCE_TIME_MS 300 // Tempo de debounce em ms
 
@@ -188,7 +186,7 @@ int main() {
     {
       mapped_vrx_value = 0;
     }
-    if (mapped_vry_value > -CALIBRATION_OFFSET && mapped_vry_value < 0)
+    if (abs(mapped_vry_value) < CALIBRATION_OFFSET && abs(mapped_vry_value) > 0)
     {
       mapped_vry_value = 0;
     }
