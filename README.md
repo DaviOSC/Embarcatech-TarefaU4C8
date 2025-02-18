@@ -71,3 +71,5 @@ A função `gpio_irq_handler` é responsável por:
 - Ativar o BOOTSEL quando o botão B é pressionado.(Função extra)
 
 ## Vídeo de explicação 
+
+https://youtu.be/fQJ7_umX07I
